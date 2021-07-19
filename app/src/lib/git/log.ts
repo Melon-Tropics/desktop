@@ -15,6 +15,7 @@ import {
 } from './interpret-trailers'
 import { getCaptures } from '../helpers/regex'
 import { createLogParser } from './git-delimiter-parser'
+import { revRange } from '.'
 
 /**
  * Map the raw status text from Git to an app-friendly value
@@ -63,8 +64,9 @@ function mapStatus(
  */
 export async function getCommits(
   repository: Repository,
-  revisionRange: string,
-  limit: number,
+  revisionRange?: string,
+  limit?: number,
+  skip?: number,
   additionalArgs: ReadonlyArray<string> = []
 ): Promise<ReadonlyArray<Commit>> {
   const { formatArgs, parse } = createLogParser({
@@ -82,22 +84,32 @@ export async function getCommits(
     refs: '%D',
   })
 
-  const result = await git(
-    [
-      'log',
-      revisionRange,
-      `--date=raw`,
-      `--max-count=${limit}`,
-      ...formatArgs,
-      '--no-show-signature',
-      '--no-color',
-      ...additionalArgs,
-      '--',
-    ],
-    repository.path,
-    'getCommits',
-    { successExitCodes: new Set([0, 128]) }
+  const args = ['log']
+
+  if (revisionRange !== undefined) {
+    args.push(revisionRange)
+  }
+
+  args.push('--date=raw')
+
+  if (limit !== undefined) {
+    args.push(`--max-count=${limit}`)
+  }
+
+  if (skip !== undefined) {
+    args.push(`--skip=${skip}`)
+  }
+
+  args.push(
+    ...formatArgs,
+    '--no-show-signature',
+    '--no-color',
+    ...additionalArgs,
+    '--'
   )
+  const result = await git(args, repository.path, 'getCommits', {
+    successExitCodes: new Set([0, 128]),
+  })
 
   // if the repository has an unborn HEAD, return an empty history of commits
   if (result.exitCode === 128) {
@@ -201,4 +213,26 @@ export async function getCommit(
   }
 
   return commits[0]
+}
+
+/**
+ * Determine if merge commits exist in history after given commit
+ * If no commitRef is null, goes back to HEAD of branch.
+ */
+export async function doMergeCommitsExistAfterCommit(
+  repository: Repository,
+  commitRef: string | null
+): Promise<boolean> {
+  const commitRevRange =
+    commitRef === null ? undefined : revRange(commitRef, 'HEAD')
+
+  const mergeCommits = await getCommits(
+    repository,
+    commitRevRange,
+    undefined,
+    undefined,
+    ['--merges']
+  )
+
+  return mergeCommits.length > 0
 }

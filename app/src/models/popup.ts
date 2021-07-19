@@ -5,17 +5,19 @@ import {
 } from './repository'
 import { PullRequest } from './pull-request'
 import { Branch } from './branch'
-import { ReleaseSummary } from './release-notes'
+import { ReleaseNote, ReleaseSummary } from './release-notes'
 import { IRemote } from './remote'
 import { RetryAction } from './retry-actions'
 import { WorkingDirectoryFileChange } from './status'
 import { PreferencesTab } from './preferences'
-import { CommitOneLine, ICommitContext } from './commit'
+import { Commit, CommitOneLine, ICommitContext } from './commit'
 import { IStashEntry } from './stash-entry'
 import { Account } from '../models/account'
 import { Progress } from './progress'
 import { ITextDiff, DiffSelection } from './diff'
 import { RepositorySettingsTab } from '../ui/repository-settings/repository-settings'
+import { ICommitMessage } from './commit-message'
+import { IAuthor } from './author'
 
 export enum PopupType {
   RenameBranch = 1,
@@ -23,7 +25,6 @@ export enum PopupType {
   DeleteRemoteBranch,
   ConfirmDiscardChanges,
   Preferences,
-  MergeBranch,
   RepositorySettings,
   AddRepository,
   CreateRepository,
@@ -47,8 +48,6 @@ export enum PopupType {
   UpstreamAlreadyExists,
   ReleaseNotes,
   DeletePullRequest,
-  MergeConflicts,
-  AbortMerge,
   OversizedFiles,
   CommitConflictsWarning,
   PushNeedsPull,
@@ -70,6 +69,11 @@ export enum PopupType {
   CherryPick,
   MoveToApplicationsFolder,
   ChangeRepositoryAlias,
+  ThankYou,
+  CommitMessage,
+  MultiCommitOperation,
+  WarnLocalChangesBeforeUndo,
+  WarningBeforeReset,
 }
 
 export type Popup =
@@ -101,11 +105,6 @@ export type Popup =
     }
   | { type: PopupType.Preferences; initialSelectedTab?: PreferencesTab }
   | {
-      type: PopupType.MergeBranch
-      repository: Repository
-      branch?: Branch
-    }
-  | {
       type: PopupType.RepositorySettings
       repository: Repository
       initialSelectedTab?: RepositorySettingsTab
@@ -120,6 +119,7 @@ export type Popup =
       type: PopupType.CreateBranch
       repository: Repository
       initialName?: string
+      targetCommit?: CommitOneLine
     }
   | { type: PopupType.SignIn }
   | { type: PopupType.About }
@@ -168,18 +168,6 @@ export type Popup =
       repository: Repository
       branch: Branch
       pullRequest: PullRequest
-    }
-  | {
-      type: PopupType.MergeConflicts
-      repository: Repository
-      ourBranch: string
-      theirBranch?: string
-    }
-  | {
-      type: PopupType.AbortMerge
-      repository: Repository
-      ourBranch: string
-      theirBranch?: string
     }
   | {
       type: PopupType.OversizedFiles
@@ -278,3 +266,35 @@ export type Popup =
     }
   | { type: PopupType.MoveToApplicationsFolder }
   | { type: PopupType.ChangeRepositoryAlias; repository: Repository }
+  | {
+      type: PopupType.ThankYou
+      userContributions: ReadonlyArray<ReleaseNote>
+      friendlyName: string
+      latestVersion: string | null
+    }
+  | {
+      type: PopupType.CommitMessage
+      coAuthors: ReadonlyArray<IAuthor>
+      showCoAuthoredBy: boolean
+      commitMessage: ICommitMessage | null
+      dialogTitle: string
+      dialogButtonText: string
+      prepopulateCommitSummary: boolean
+      repository: Repository
+      onSubmitCommitMessage: (context: ICommitContext) => Promise<boolean>
+    }
+  | {
+      type: PopupType.MultiCommitOperation
+      repository: Repository
+    }
+  | {
+      type: PopupType.WarnLocalChangesBeforeUndo
+      repository: Repository
+      commit: Commit
+      isWorkingDirectoryClean: boolean
+    }
+  | {
+      type: PopupType.WarningBeforeReset
+      repository: Repository
+      commit: Commit
+    }

@@ -14,7 +14,8 @@ import { parseError } from '../../lib/squirrel-error-parser'
 import { ReleaseSummary } from '../../models/release-notes'
 import { generateReleaseSummary } from '../../lib/release-notes'
 import { setNumber, getNumber } from '../../lib/local-storage'
-import { enableUpdateFromRosettaToARM64 } from '../../lib/feature-flag'
+import { enableUpdateFromEmulatedX64ToARM64 } from '../../lib/feature-flag'
+import { isRunningUnderARM64Translation } from 'detect-arm64-translation'
 
 /** The states the auto updater can be in. */
 export enum UpdateStatus {
@@ -167,11 +168,15 @@ class UpdateStore {
     // on an arm64 machine), we need to tweak the update URL here to point at
     // the arm64 binary.
     if (
-      enableUpdateFromRosettaToARM64() &&
-      remote.app.runningUnderRosettaTranslation === true
+      enableUpdateFromEmulatedX64ToARM64() &&
+      (remote.app.runningUnderRosettaTranslation === true ||
+        isRunningUnderARM64Translation() === true)
     ) {
       const url = new URL(updatesURL)
-      url.searchParams.set('architecture', 'arm64')
+      url.pathname = url.pathname.replace(
+        /\/desktop\/desktop\/(x64\/)?latest/,
+        '/desktop/desktop/arm64/latest'
+      )
       updatesURL = url.toString()
     }
 

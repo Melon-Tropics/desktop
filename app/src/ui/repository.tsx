@@ -14,7 +14,6 @@ import {
   IRepositoryState,
   RepositorySectionTab,
   ChangesSelectionKind,
-  FoldoutType,
 } from '../lib/app-state'
 import { Dispatcher } from './dispatcher'
 import { IssuesStore, GitHubUserStore } from '../lib/stores'
@@ -29,7 +28,12 @@ import { TutorialPanel, TutorialWelcome, TutorialDone } from './tutorial'
 import { TutorialStep, isValidTutorialStep } from '../models/tutorial-step'
 import { openFile } from './lib/open-file'
 import { AheadBehindStore } from '../lib/stores/ahead-behind-store'
-import { CherryPickStepKind } from '../models/cherry-pick'
+import { dragAndDropManager } from '../lib/drag-and-drop-manager'
+import { DragType } from '../models/drag-drop'
+import {
+  DragAndDropIntroType,
+  AvailableDragAndDropIntroKeys,
+} from './history/drag-and-drop-intro'
 
 /** The widest the sidebar can be with the minimum window size. */
 const MaxSidebarWidth = 495
@@ -92,8 +96,9 @@ interface IRepositoryViewProps {
     repository: Repository,
     commits: ReadonlyArray<CommitOneLine>
   ) => void
-  /* Whether or not the user has been introduced to cherry picking feature */
-  readonly hasShownCherryPickIntro: boolean
+
+  /* Types of drag and drop intros already seen by the user */
+  readonly dragAndDropIntroTypesShown: ReadonlySet<DragAndDropIntroType>
 }
 
 interface IRepositoryViewState {
@@ -113,6 +118,10 @@ export class RepositoryView extends React.Component<
   private previousSection: RepositorySectionTab = this.props.state
     .selectedSection
 
+  // Flag to force the app to use the scroll position in the state the next time
+  // the Compare list is rendered.
+  private forceCompareListScrollTop: boolean = false
+
   public constructor(props: IRepositoryViewProps) {
     super(props)
 
@@ -120,6 +129,14 @@ export class RepositoryView extends React.Component<
       changesListScrollTop: 0,
       compareListScrollTop: 0,
     }
+  }
+
+  public scrollCompareListToTop(): void {
+    this.forceCompareListScrollTop = true
+
+    this.setState({
+      compareListScrollTop: 0,
+    })
   }
 
   private onChangesListScrolled = (scrollTop: number) => {
@@ -162,9 +179,14 @@ export class RepositoryView extends React.Component<
   }
 
   private renderNewCallToActionBubble(): JSX.Element | null {
-    const { hasShownCherryPickIntro, state } = this.props
+    const { dragAndDropIntroTypesShown, state } = this.props
     const { compareState } = state
-    if (hasShownCherryPickIntro || compareState.commitSHAs.length === 0) {
+    const remainingDragAndDropIntros = AvailableDragAndDropIntroKeys.filter(
+      intro => !dragAndDropIntroTypesShown.has(intro)
+    )
+    const hasSeenAllDragAndDropIntros = remainingDragAndDropIntros.length === 0
+
+    if (hasSeenAllDragAndDropIntros || compareState.commitSHAs.length === 0) {
       return null
     }
     return <span className="call-to-action-bubble">New</span>
@@ -211,6 +233,7 @@ export class RepositoryView extends React.Component<
         availableWidth={availableWidth}
         gitHubUserStore={this.props.gitHubUserStore}
         isCommitting={this.props.state.isCommitting}
+        isAmending={this.props.state.isAmending}
         isPushPullFetchInProgress={this.props.state.isPushPullFetchInProgress}
         focusCommitMessage={this.props.focusCommitMessage}
         askForConfirmationOnDiscardChanges={
@@ -234,10 +257,12 @@ export class RepositoryView extends React.Component<
     const currentBranch = tip.kind === TipState.Valid ? tip.branch : null
 
     const scrollTop =
+      this.forceCompareListScrollTop ||
       this.previousSection === RepositorySectionTab.Changes
         ? this.state.compareListScrollTop
         : undefined
     this.previousSection = RepositorySectionTab.History
+    this.forceCompareListScrollTop = false
 
     return (
       <CompareSidebar
@@ -252,14 +277,14 @@ export class RepositoryView extends React.Component<
         localTags={this.props.state.localTags}
         dispatcher={this.props.dispatcher}
         onRevertCommit={this.onRevertCommit}
+        onAmendCommit={this.onAmendCommit}
         onViewCommitOnGitHub={this.props.onViewCommitOnGitHub}
         onCompareListScrolled={this.onCompareListScrolled}
         onCherryPick={this.props.onCherryPick}
         compareListScrollTop={scrollTop}
         tagsToPush={this.props.state.tagsToPush}
         aheadBehindStore={this.props.aheadBehindStore}
-        hasShownCherryPickIntro={this.props.hasShownCherryPickIntro}
-        onDragCommitEnd={this.onDragCommitEnd}
+        dragAndDropIntroTypesShown={this.props.dragAndDropIntroTypesShown}
         isCherryPickInProgress={this.props.state.cherryPickState.step !== null}
       />
     )
@@ -344,7 +369,7 @@ export class RepositoryView extends React.Component<
   }
 
   private renderContentForHistory(): JSX.Element {
-    const { commitSelection, cherryPickState } = this.props.state
+    const { commitSelection } = this.props.state
 
     const sha =
       commitSelection.shas.length === 1 ? commitSelection.shas[0] : null
@@ -354,10 +379,9 @@ export class RepositoryView extends React.Component<
 
     const { changedFiles, file, diff } = commitSelection
 
-    const { step } = cherryPickState
-
-    const showDragOverlay =
-      step !== null && step.kind === CherryPickStepKind.CommitsChosen
+    const showDragOverlay = dragAndDropManager.isDragOfTypeInProgress(
+      DragType.Commit
+    )
 
     return (
       <SelectedCommit
@@ -496,6 +520,10 @@ export class RepositoryView extends React.Component<
     this.props.dispatcher.revertCommit(this.props.repository, commit)
   }
 
+  private onAmendCommit = () => {
+    this.props.dispatcher.setAmendingRepository(this.props.repository, true)
+  }
+
   public componentDidMount() {
     window.addEventListener('keydown', this.onGlobalKeyDown)
   }
@@ -564,26 +592,5 @@ export class RepositoryView extends React.Component<
       )
     }
     return null
-  }
-
-  /**
-   * This method is a generic event handler for when a commit has ended being
-   * dragged.
-   *
-   * Currently only used for cherry picking, but this could be more generic.
-   */
-  private onDragCommitEnd = async (clearCherryPickingState: boolean) => {
-    this.props.dispatcher.closeFoldout(FoldoutType.Branch)
-
-    if (!clearCherryPickingState) {
-      return
-    }
-
-    const { state, repository } = this.props
-    const { cherryPickState } = state
-    if (cherryPickState !== null && cherryPickState.step !== null) {
-      this.props.dispatcher.endCherryPickFlow(repository)
-      this.props.dispatcher.recordCherryPickDragStartedAndCanceled()
-    }
   }
 }

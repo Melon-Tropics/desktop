@@ -43,6 +43,8 @@ import {
   SimplifiedDiffRow,
   IDiffRowData,
   DiffColumn,
+  getLineWidthFromDigitCount,
+  getNumberOfDigits,
 } from './diff-helpers'
 import { showContextualMenu } from '../main-process-proxy'
 import { getTokens } from './diff-syntax-mode'
@@ -96,6 +98,9 @@ interface ISideBySideDiffProps {
     diff: ITextDiff,
     diffSelection: DiffSelection
   ) => void
+
+  /** Whether or not whitespace changes are hidden. */
+  readonly hideWhitespaceInDiff: boolean
 
   /**
    * Whether we'll show a confirmation dialog when the user
@@ -297,6 +302,10 @@ export class SideBySideDiff extends React.Component<
       return null
     }
 
+    const lineNumberWidth = `${getLineWidthFromDigitCount(
+      getNumberOfDigits(this.state.diff.maxLineNumber)
+    )}px`
+
     const rowWithTokens = this.createFullRow(row, index)
 
     const isHunkHovered =
@@ -313,10 +322,12 @@ export class SideBySideDiff extends React.Component<
         <div key={key} style={style}>
           <SideBySideDiffRow
             row={rowWithTokens}
+            lineNumberWidth={lineNumberWidth}
             numRow={index}
             isDiffSelectable={canSelect(this.props.file)}
             isHunkHovered={isHunkHovered}
             showSideBySideDiff={this.props.showSideBySideDiff}
+            hideWhitespaceInDiff={this.props.hideWhitespaceInDiff}
             onStartSelection={this.onStartSelection}
             onUpdateSelection={this.onUpdateSelection}
             onMouseEnterHunk={this.onMouseEnterHunk}
@@ -720,10 +731,14 @@ export class SideBySideDiff extends React.Component<
    * @param diffLineNumber the line number the diff where the user clicked
    */
   private onContextMenuLine = (diffLineNumber: number) => {
-    const { file } = this.props
+    const { file, hideWhitespaceInDiff } = this.props
     const { diff } = this.state
 
     if (!canSelect(file)) {
+      return
+    }
+
+    if (hideWhitespaceInDiff) {
       return
     }
 

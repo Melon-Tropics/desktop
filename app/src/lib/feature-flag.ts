@@ -21,11 +21,6 @@ function enableDevelopmentFeatures(): boolean {
   return false
 }
 
-/** Should we show progress bars on the Windows app taskbar icon? */
-export function enableProgressBarOnIcon(): boolean {
-  return enableBetaFeatures()
-}
-
 /** Should the app enable beta features? */
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 //@ts-ignore: this will be used again in the future
@@ -49,7 +44,7 @@ export function enableWSLDetection(): boolean {
 
 /** Should the app show hide whitespace in changes tab */
 export function enableHideWhitespaceInDiffOption(): boolean {
-  return enableBetaFeatures()
+  return true
 }
 
 /** Should the app use the shiny new TCP-based trampoline? */
@@ -73,20 +68,57 @@ export function enableUnhandledRejectionReporting(): boolean {
 
 /** Should we allow expanding text diffs? */
 export function enableTextDiffExpansion(): boolean {
-  return enableBetaFeatures()
+  return true
 }
 
-/** Should we allow apps running from Rosetta to auto-update to ARM64 builds? */
-export function enableUpdateFromRosettaToARM64(): boolean {
-  return false
+/**
+ * Should we allow x64 apps running under ARM translation to auto-update to
+ * ARM64 builds?
+ */
+export function enableUpdateFromEmulatedX64ToARM64(): boolean {
+  if (__DARWIN__) {
+    return true
+  }
+
+  return enableBetaFeatures()
 }
 
 /** Should we allow using the save dialog when choosing where to clone a repo */
 export function enableSaveDialogOnCloneRepository(): boolean {
-  return enableBetaFeatures()
+  return true
 }
 
 /** Should we allow setting repository aliases? */
 export function enableRepositoryAliases(): boolean {
-  return enableBetaFeatures()
+  return true
+}
+
+/** Should we allow to create branches from a commit? */
+export function enableBranchFromCommit(): boolean {
+  return true
+}
+
+/** Should we allow squashing? */
+export function enableSquashing(): boolean {
+  return true
+}
+
+/** Should we allow squash-merging? */
+export function enableSquashMerging(): boolean {
+  return true
+}
+
+/** Should we allow amending commits? */
+export function enableAmendingCommits(): boolean {
+  return true
+}
+
+/** Should we allow reordering commits? */
+export function enableCommitReordering(): boolean {
+  return true
+}
+
+/** Should we allow resetting to a previous commit? */
+export function enableResetToCommit(): boolean {
+  return enableDevelopmentFeatures()
 }

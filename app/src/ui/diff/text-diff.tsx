@@ -44,7 +44,11 @@ import { uuid } from '../../lib/uuid'
 import { showContextualMenu } from '../main-process-proxy'
 import { IMenuItem } from '../../lib/menu-item'
 import { enableTextDiffExpansion } from '../../lib/feature-flag'
-import { canSelect } from './diff-helpers'
+import {
+  canSelect,
+  getLineWidthFromDigitCount,
+  getNumberOfDigits,
+} from './diff-helpers'
 import {
   expandTextDiffHunk,
   DiffExpansionKind,
@@ -52,6 +56,7 @@ import {
   expandWholeTextDiff,
 } from './text-diff-expansion'
 import { createOcticonElement } from '../octicons/octicon'
+import { HideWhitespaceWarning } from './hide-whitespace-warning'
 
 /** The longest line for which we'd try to calculate a line diff. */
 const MaxIntraLineDiffStringLength = 4096
@@ -987,7 +992,8 @@ export class TextDiff extends React.Component<ITextDiffProps, ITextDiffState> {
                 lineNumber,
                 hunks,
                 hunk,
-                diffLine
+                diffLine,
+                getNumberOfDigits(this.state.diff.maxLineNumber)
               )
               cm.setGutterMarker(line, diffGutterName, marker)
             })
@@ -1003,6 +1009,17 @@ export class TextDiff extends React.Component<ITextDiffProps, ITextDiffState> {
     if (batchedOps.length > 0) {
       cm.operation(() => batchedOps.forEach(x => x()))
     }
+
+    const diffSize = getLineWidthFromDigitCount(
+      getNumberOfDigits(this.state.diff.maxLineNumber)
+    )
+
+    const gutterParentElement = cm.getGutterElement()
+    const gutterElement = gutterParentElement.getElementsByClassName(
+      'diff-gutter'
+    )[0]
+    gutterElement.setAttribute('style', `width: ${diffSize * 2}px;`)
+    cm.refresh()
   }
 
   /**
@@ -1064,9 +1081,14 @@ export class TextDiff extends React.Component<ITextDiffProps, ITextDiffState> {
     index: number,
     hunks: ReadonlyArray<DiffHunk>,
     hunk: DiffHunk,
-    diffLine: DiffLine
+    diffLine: DiffLine,
+    digitCount: number
   ) {
+    const diffSize = getLineWidthFromDigitCount(digitCount)
+
     const marker = document.createElement('div')
+    marker.style.width = `${diffSize * 2}px`
+    marker.style.margin = '0px'
     marker.className = 'diff-line-gutter'
 
     marker.addEventListener(
@@ -1076,10 +1098,12 @@ export class TextDiff extends React.Component<ITextDiffProps, ITextDiffState> {
 
     const oldLineNumber = document.createElement('div')
     oldLineNumber.classList.add('diff-line-number', 'before')
+    oldLineNumber.style.width = `${diffSize}px`
     marker.appendChild(oldLineNumber)
 
     const newLineNumber = document.createElement('div')
     newLineNumber.classList.add('diff-line-number', 'after')
+    newLineNumber.style.width = `${diffSize}px`
     marker.appendChild(newLineNumber)
 
     const hunkHandle = document.createElement('div')
@@ -1246,8 +1270,7 @@ export class TextDiff extends React.Component<ITextDiffProps, ITextDiffState> {
     }
 
     if (this.props.hideWhitespaceInDiff) {
-      marker.title =
-        'Partial committing is not available while hiding whitespace changes'
+      marker.title = HideWhitespaceWarning
     }
 
     const hunkExpandWholeHandle = marker.getElementsByClassName(
